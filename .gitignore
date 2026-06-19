@@ -1,0 +1,15 @@
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment variables (API keys)
+.env
+
+# Node modules (if you ever add npm)
+node_modules/
+
+# Logs
+*.log

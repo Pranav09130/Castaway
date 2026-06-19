@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Castaway — Weather</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="dark">
+
+  <canvas id="bg-canvas"></canvas>
+
+  <!-- Auth guard -->
+  <script>
+    (function(){
+      var s = JSON.parse(localStorage.getItem('castaway_session')||'null');
+      if(!s){window.location.replace('auth.html');return;}
+      if(!s.remember&&!sessionStorage.getItem('castaway_session_live')){
+        localStorage.removeItem('castaway_session');
+        window.location.replace('auth.html');
+      }
+    })();
+  </script>
+
+  <!-- Theme toggle -->
+  <button class="theme-btn" id="themeToggle" aria-label="Toggle theme">
+    <svg class="sun-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    <svg class="moon-icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+
+  <!-- User avatar + logout -->
+  <div class="user-menu" id="userMenu">
+    <div class="user-avatar" id="userAvatar" onclick="toggleUserDropdown()">
+      <span id="userInitials">?</span>
+    </div>
+    <div class="user-dropdown" id="userDropdown">
+      <div class="user-dropdown-name" id="userDropdownName">—</div>
+      <div class="user-dropdown-email" id="userDropdownEmail">—</div>
+      <hr class="dropdown-divider"/>
+      <button class="dropdown-item" onclick="handleLogout()">
+        <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Sign out
+      </button>
+    </div>
+  </div>
+
+  <div class="app-container">
+
+    <!-- ── Top bar: logo + search ── -->
+    <header class="top-bar">
+      <div class="logo-group">
+        <svg viewBox="0 0 40 40" class="compass-logo">
+          <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <circle cx="20" cy="20" r="2.5" fill="currentColor"/>
+          <polygon points="20,4 22,20 20,23 18,20" fill="currentColor" opacity="0.9"/>
+          <polygon points="20,36 22,20 20,17 18,20" fill="currentColor" opacity="0.35"/>
+          <polygon points="36,20 20,22 17,20 20,18" fill="currentColor" opacity="0.35"/>
+          <polygon points="4,20 20,22 23,20 20,18" fill="currentColor" opacity="0.7"/>
+        </svg>
+        <div>
+          <span class="brand-name">Castaway</span>
+          <span class="brand-tagline">Navigate the weather</span>
+        </div>
+      </div>
+
+      <div class="search-wrapper">
+        <div class="search-box" id="searchBox">
+          <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="cityInput" placeholder="Search city or location…" autocomplete="off" spellcheck="false"/>
+          <button class="search-btn" id="searchBtn" aria-label="Search">
+            <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+        </div>
+        <div class="validation-msg" id="validationMsg"></div>
+        <div class="recents" id="recentsPanel">
+          <span class="recents-label">Recent</span>
+          <div class="recents-chips" id="recentsChips"></div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Offline banner -->
+    <div class="offline-banner" id="offlineBanner">
+      <div class="offline-dot"></div>
+      You're offline — check your connection
+    </div>
+
+    <!-- Loading -->
+    <div class="loader-wrap" id="loaderWrap">
+      <div class="wave-loader"><span></span><span></span><span></span><span></span><span></span></div>
+      <p class="loader-text">Reading the winds…</p>
+    </div>
+
+    <!-- Error -->
+    <div class="error-card" id="errorCard">
+      <div class="error-inner">
+        <div class="error-icon" id="errorIcon">⚓</div>
+        <p class="error-title" id="errorTitle">Lost at Sea</p>
+        <p class="error-msg" id="errorMsg">City not found. Check your spelling and try again.</p>
+        <p class="error-hint" id="errorHint"></p>
+        <div class="error-suggestions" id="errorSuggestions"></div>
+        <button class="error-retry-btn" id="errorRetryBtn">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Try again
+        </button>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════
+         WEATHER DASHBOARD
+    ══════════════════════════════════ -->
+    <main class="weather-content" id="weatherContent">
+
+      <!-- Location bar + tabs -->
+      <div class="location-bar">
+        <div class="loc-left">
+          <svg class="loc-pin" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <div>
+            <h2 class="loc-city" id="cityName">—</h2>
+            <span class="loc-meta" id="countryName">—</span>
+          </div>
+        </div>
+        <nav class="view-tabs" id="viewTabs">
+          <button class="tab-btn active" data-tab="now">Now</button>
+          <button class="tab-btn" data-tab="hourly">Hourly</button>
+          <button class="tab-btn" data-tab="forecast">10 Day</button>
+        </nav>
+      </div>
+
+      <!-- ── MAIN 3-COLUMN GRID ── -->
+      <div class="dash-grid">
+
+        <!-- COL 1: Current conditions card -->
+        <div class="glass-card current-card" id="heroCard">
+          <div class="current-top">
+            <div class="current-top-meta">
+              <span class="as-of-label" id="asOfLabel">—</span>
+            </div>
+            <div class="current-main">
+              <div class="temp-block">
+                <span class="temp-value" id="tempValue">—</span>
+                <span class="temp-unit">°C</span>
+              </div>
+              <img class="wx-icon" id="weatherIcon" src="" alt="" />
+            </div>
+            <div class="current-feels">
+              <span id="feelsLike">Feels like —°</span>
+              <span class="dot-sep">·</span>
+              <span id="weatherDesc">—</span>
+            </div>
+            <div class="hi-lo-row">
+              <span>Hi: <strong id="tempMax">—</strong>°</span>
+              <span class="dot-sep">·</span>
+              <span>Lo: <strong id="tempMin">—</strong>°</span>
+            </div>
+          </div>
+
+          <div class="current-details">
+            <p class="section-eyebrow">Current Details</p>
+            <div class="details-grid">
+              <div class="detail-row">
+                <span class="detail-label">Windchill</span>
+                <span class="detail-val" id="windchill">—</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Daily Rain</span>
+                <span class="detail-val" id="dailyRain">—</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Dew Point</span>
+                <span class="detail-val" id="dewPoint">—</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Humidity</span>
+                <span class="detail-val" id="humidity">—</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Pressure</span>
+                <span class="detail-val" id="pressure">—</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Avg Wind</span>
+                <span class="detail-val" id="windSpeed">—</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Sunrise</span>
+                <span class="detail-val" id="sunrise">—</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Moon</span>
+                <span class="detail-val" id="moonPhase">—</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Sunset</span>
+                <span class="detail-val" id="sunset">—</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">UV Index</span>
+                <span class="detail-val" id="uvIndex">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- COL 2: Map + Forecast -->
+        <div class="mid-col">
+
+          <!-- Mini weather map -->
+          <div class="glass-card map-card">
+            <div class="map-header">
+              <span class="section-eyebrow">Live Weather Map</span>
+              <a class="map-expand" id="mapExpand" href="#" target="_blank" rel="noopener">
+                <svg viewBox="0 0 24 24" width="13" height="13"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                Open map
+              </a>
+            </div>
+            <div class="map-frame" id="mapFrame">
+              <iframe id="weatherMap" src="" title="Weather map" frameborder="0" loading="lazy"></iframe>
+              <div class="map-placeholder" id="mapPlaceholder">
+                <svg viewBox="0 0 64 64" width="48" height="48" opacity="0.2"><circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M32 10 Q46 22 46 32 Q46 48 32 54 Q18 48 18 32 Q18 22 32 10Z" fill="none" stroke="currentColor" stroke-width="1"/><line x1="4" y1="32" x2="60" y2="32" stroke="currentColor" stroke-width="1"/></svg>
+                <span>Search a city to load map</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Weather Forecast card (today + tonight) -->
+          <div class="glass-card forecast-brief-card">
+            <div class="forecast-brief-header">
+              <span class="section-eyebrow">Weather Forecast</span>
+            </div>
+            <div class="forecast-brief-list" id="forecastBriefList">
+              <div class="forecast-brief-row" id="forecastToday">
+                <div class="fb-period">
+                  <img class="fb-icon" id="fTodayIcon" src="" alt="" />
+                  <span class="fb-label">Today</span>
+                  <span class="fb-temp" id="fTodayTemp">—</span>
+                </div>
+                <p class="fb-desc" id="fTodayDesc">—</p>
+              </div>
+              <div class="forecast-brief-row" id="forecastTonite">
+                <div class="fb-period">
+                  <img class="fb-icon" id="fTonightIcon" src="" alt="" />
+                  <span class="fb-label">Tonight</span>
+                  <span class="fb-temp" id="fTonightTemp">—</span>
+                </div>
+                <p class="fb-desc" id="fTonightDesc">—</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- COL 3: Stats column -->
+        <div class="stats-col">
+
+          <!-- Local time card -->
+          <div class="glass-card time-card">
+            <div class="time-display">
+              <span class="time-val" id="localTime">—</span>
+              <span class="time-date" id="localDate">—</span>
+            </div>
+            <div class="sun-track">
+              <div class="sun-track-bar">
+                <div class="sun-track-fill" id="sunTrackFill"></div>
+                <div class="sun-orb" id="sunOrb">☀</div>
+              </div>
+              <div class="sun-labels">
+                <span id="sunriseLabel">—</span>
+                <span id="sunsetLabel">—</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick stat pills -->
+          <div class="stat-pills">
+            <div class="glass-card stat-pill">
+              <svg class="pill-icon" viewBox="0 0 24 24"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/></svg>
+              <div class="pill-info">
+                <span class="pill-label">Wind</span>
+                <span class="pill-val" id="windPill">—</span>
+              </div>
+            </div>
+            <div class="glass-card stat-pill">
+              <svg class="pill-icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <div class="pill-info">
+                <span class="pill-label">Visibility</span>
+                <span class="pill-val" id="visibility">—</span>
+              </div>
+            </div>
+            <div class="glass-card stat-pill">
+              <svg class="pill-icon" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 1 7 7c0 5.25-7 13-7 13S5 14.25 5 9a7 7 0 0 1 7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+              <div class="pill-info">
+                <span class="pill-label">Humidity</span>
+                <span class="pill-val" id="humidityPill">—</span>
+              </div>
+              <div class="pill-bar"><div class="pill-bar-fill" id="humidityBar"></div></div>
+            </div>
+            <div class="glass-card stat-pill">
+              <svg class="pill-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <div class="pill-info">
+                <span class="pill-label">Pressure</span>
+                <span class="pill-val" id="pressurePill">—</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cloud + UV row -->
+          <div class="mini-row">
+            <div class="glass-card mini-card">
+              <span class="section-eyebrow">Cloud Cover</span>
+              <span class="mini-val" id="cloudVal">—%</span>
+              <div class="mini-bar"><div class="mini-bar-fill" id="cloudFill"></div></div>
+            </div>
+            <div class="glass-card mini-card">
+              <span class="section-eyebrow">UV Index</span>
+              <span class="mini-val" id="uviVal">—</span>
+              <span class="mini-sub" id="uviLabel">—</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ── BOTTOM FULL-WIDTH ROW ── -->
+      <div class="bottom-row">
+
+        <!-- Air Quality -->
+        <div class="glass-card aq-card">
+          <div class="aq-header">
+            <span class="section-eyebrow">Air Quality</span>
+            <a class="aq-link" href="https://aqicn.org" target="_blank" rel="noopener">Full report ↗</a>
+          </div>
+          <div class="aq-body">
+            <div class="aq-score-wrap">
+              <div class="aq-badge" id="aqBadge">
+                <span class="aq-num" id="aqNum">—</span>
+              </div>
+              <div>
+                <span class="aq-level" id="aqLevel">—</span>
+                <span class="aq-trigger">Top Triggers: <span id="aqTrigger">—</span></span>
+              </div>
+            </div>
+            <div class="aq-bar-wrap">
+              <div class="aq-scale">
+                <span>Good</span><span>Moderate</span><span>Unhealthy</span><span>Hazardous</span>
+              </div>
+              <div class="aq-bar">
+                <div class="aq-segments">
+                  <div class="aq-seg" style="background:#4ec9a0"></div>
+                  <div class="aq-seg" style="background:#f0c060"></div>
+                  <div class="aq-seg" style="background:#f0a458"></div>
+                  <div class="aq-seg" style="background:#e06c75"></div>
+                  <div class="aq-seg" style="background:#a070c0"></div>
+                </div>
+                <div class="aq-marker" id="aqMarker" style="left:0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lightning / Alerts -->
+        <div class="glass-card lightning-card">
+          <div class="lightning-header">
+            <span class="section-eyebrow">Lightning &amp; Alerts</span>
+          </div>
+          <div class="lightning-body">
+            <div class="lightning-icon-wrap" id="lightningIconWrap">
+              <div class="lightning-orb" id="lightningOrb">
+                <svg viewBox="0 0 24 24" width="28" height="28"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              </div>
+            </div>
+            <div class="lightning-info">
+              <span class="lightning-dist" id="lightningDist">No alerts</span>
+              <span class="lightning-sub" id="lightningSub">Conditions are calm</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5-day forecast strip -->
+        <div class="glass-card forecast-strip-card">
+          <div class="fs-header">
+            <span class="section-eyebrow">5-Day Forecast</span>
+            <div class="chart-toggle">
+              <button class="chart-btn active" data-chart="temp">Temp</button>
+              <button class="chart-btn" data-chart="rain">Rain</button>
+              <button class="chart-btn" data-chart="wind">Wind</button>
+            </div>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="forecastChart"></canvas>
+          </div>
+          <div class="forecast-days" id="forecastDays"></div>
+        </div>
+
+      </div>
+
+    </main>
+
+    <!-- Empty state -->
+    <div class="empty-state" id="emptyState">
+      <div class="empty-compass">
+        <svg viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="55" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 4" opacity="0.3"/>
+          <circle cx="60" cy="60" r="40" fill="none" stroke="currentColor" stroke-width="0.5" opacity="0.2"/>
+          <circle cx="60" cy="60" r="6" fill="currentColor" opacity="0.4"/>
+          <polygon points="60,10 63,60 60,68 57,60" fill="currentColor" opacity="0.7"/>
+          <polygon points="60,110 63,60 60,52 57,60" fill="currentColor" opacity="0.2"/>
+          <polygon points="110,60 60,63 52,60 60,57" fill="currentColor" opacity="0.2"/>
+          <polygon points="10,60 60,63 68,60 60,57" fill="currentColor" opacity="0.4"/>
+          <text x="60" y="8" text-anchor="middle" font-size="8" fill="currentColor" opacity="0.5" font-family="Space Mono">N</text>
+          <text x="60" y="116" text-anchor="middle" font-size="8" fill="currentColor" opacity="0.3" font-family="Space Mono">S</text>
+          <text x="116" y="64" text-anchor="middle" font-size="8" fill="currentColor" opacity="0.3" font-family="Space Mono">E</text>
+          <text x="5" y="64" text-anchor="middle" font-size="8" fill="currentColor" opacity="0.3" font-family="Space Mono">W</text>
+        </svg>
+      </div>
+      <p class="empty-title">Set Your Course</p>
+      <p class="empty-sub">Search for any city to see current conditions</p>
+    </div>
+
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

@@ -506,7 +506,7 @@ function saveSession(user, remember) {
   const isRemembered = s.remember;
   const isSessionAlive = sessionStorage.getItem('castaway_session_live');
   if (isRemembered || isSessionAlive) {
-    window.location.replace('index.html');
+    window.location.replace('dashboard.html');
   } else {
     // Session cookie gone — clear stored session
     localStorage.removeItem(SESSION_KEY);
@@ -658,7 +658,7 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
   showAlert('Welcome back, ' + user.name + '! Taking you to your dashboard…', 'success');
 
   await fakeDelay(700);
-  window.location.href = 'index.html';
+  window.location.href = 'dashboard.html';
 });
 
 /* ── SIGNUP ── */
@@ -716,7 +716,7 @@ document.getElementById('signupForm').addEventListener('submit', async function(
 
   showAlert('Account created! Welcome to Castaway, ' + name + ' ✦', 'success');
   await fakeDelay(800);
-  window.location.href = 'index.html';
+  window.location.href = 'dashboard.html';
 });
 
 /* ── Clear field error on input ── */

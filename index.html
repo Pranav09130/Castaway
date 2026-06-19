@@ -3,425 +3,610 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Castaway — Weather</title>
+  <title>Castaway — Navigate the Weather</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: auto; }
+
+    /* ── Page setup ── */
+    body {
+      background: #060e1c;
+      color: #e8edf5;
+      font-family: 'Space Mono', monospace;
+      overflow-x: hidden;
+    }
+
+    /* ─────────────────────────────────────────
+       SCROLL TRACK — 4× viewport tall so the
+       sticky scene has enough room to animate
+    ───────────────────────────────────────── */
+    #scroll-track {
+      height: 500vh;
+      position: relative;
+    }
+
+    /* ── Sticky viewport ── */
+    #sticky-scene {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      width: 100%;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Canvas sits behind everything ── */
+    #portal-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Progress bar ── */
+    #progress-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 2px;
+      width: 0%;
+      background: linear-gradient(to right, transparent, #5bb8d4, transparent);
+      z-index: 30;
+      transition: width 0.05s linear;
+    }
+
+    /* ── HUD: compass logo top-left ── */
+    #compass-hud {
+      position: absolute;
+      top: 1.5rem;
+      left: 1.75rem;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      opacity: 0;
+      transform: translateY(-6px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+    #compass-hud.visible { opacity: 1; transform: translateY(0); }
+    #compass-hud svg { width: 26px; height: 26px; color: #5bb8d4; animation: spin 30s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #compass-hud .hud-name {
+      font-size: 0.8rem;
+      letter-spacing: 0.14em;
+      color: #5bb8d4;
+      text-transform: uppercase;
+    }
+
+    /* ── HUD: depth counter top-right ── */
+    #depth-counter {
+      position: absolute;
+      top: 1.5rem;
+      right: 1.75rem;
+      z-index: 20;
+      font-size: 0.68rem;
+      letter-spacing: 0.12em;
+      color: rgba(91,184,212,0.55);
+      text-transform: uppercase;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    #depth-counter.visible { opacity: 1; }
+
+    /* ── Centre content ── */
+    #scene-content {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      padding: 0 1.5rem;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+    }
+
+    .phase-label {
+      font-size: 0.62rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgba(91,184,212,0.7);
+      margin-bottom: 1rem;
+    }
+
+    .main-title {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(2.4rem, 6vw, 4rem);
+      font-weight: 700;
+      color: #e8edf5;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+    .main-title .accent { color: #5bb8d4; }
+
+    .sub-title {
+      margin-top: 1rem;
+      font-size: 0.65rem;
+      letter-spacing: 0.18em;
+      color: rgba(232,237,245,0.4);
+      text-transform: uppercase;
+    }
+
+    /* ── Enter button (shown at end) ── */
+    #enter-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 2rem;
+      padding: 0.7rem 2rem;
+      border: 1px solid rgba(91,184,212,0.5);
+      border-radius: 3rem;
+      background: rgba(91,184,212,0.08);
+      color: #5bb8d4;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      cursor: pointer;
+      pointer-events: all;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.5s ease, transform 0.5s ease, background 0.2s, border-color 0.2s;
+    }
+    #enter-btn.visible { opacity: 1; transform: translateY(0); }
+    #enter-btn:hover { background: rgba(91,184,212,0.2); border-color: #5bb8d4; }
+    #enter-btn svg { width: 0.9rem; height: 0.9rem; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* ── Skip button ── */
+    #skip-btn {
+      position: absolute;
+      bottom: 1.75rem;
+      right: 1.75rem;
+      z-index: 30;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(91,184,212,0.35);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.4rem 0.8rem;
+      transition: color 0.2s;
+    }
+    #skip-btn:hover { color: rgba(91,184,212,0.8); }
+
+    /* ── Scroll hint ── */
+    #scroll-hint {
+      position: absolute;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      transition: opacity 0.4s ease;
+    }
+    #scroll-hint span {
+      font-size: 0.58rem;
+      letter-spacing: 0.2em;
+      color: rgba(91,184,212,0.45);
+      text-transform: uppercase;
+    }
+    .scroll-line {
+      width: 1px;
+      height: 2.5rem;
+      background: linear-gradient(to bottom, rgba(91,184,212,0.5), transparent);
+      animation: scrollPulse 1.8s ease-in-out infinite;
+    }
+    @keyframes scrollPulse {
+      0%, 100% { opacity: 0.3; transform: scaleY(0.6); }
+      50%       { opacity: 1;   transform: scaleY(1); }
+    }
+
+    /* ── Stage label bottom-centre ── */
+    #stage-label {
+      position: absolute;
+      bottom: 4.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      font-size: 0.6rem;
+      letter-spacing: 0.2em;
+      color: rgba(91,184,212,0.4);
+      text-transform: uppercase;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    #stage-label.visible { opacity: 1; }
+
+    /* ── Full-screen transition overlay ── */
+    #transition-overlay {
+      position: fixed;
+      inset: 0;
+      background: #060e1c;
+      z-index: 999;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.7s ease;
+    }
+    #transition-overlay.fade-in  { opacity: 1; pointer-events: all; }
+
+    /* ── Responsive ── */
+    @media (max-width: 480px) {
+      #compass-hud { top: 1rem; left: 1rem; }
+      #depth-counter { top: 1rem; right: 1rem; font-size: 0.6rem; }
+      #skip-btn { bottom: 1rem; right: 1rem; }
+      #scroll-hint { bottom: 1.25rem; }
+      #stage-label { bottom: 3.5rem; }
+    }
+  </style>
 </head>
-<body class="dark">
+<body>
 
-  <canvas id="bg-canvas"></canvas>
+  <!-- Full-screen fade overlay for page transition -->
+  <div id="transition-overlay"></div>
 
-  <!-- Auth guard -->
-  <script>
-    (function(){
-      var s = JSON.parse(localStorage.getItem('castaway_session')||'null');
-      if(!s){window.location.replace('auth.html');return;}
-      if(!s.remember&&!sessionStorage.getItem('castaway_session_live')){
-        localStorage.removeItem('castaway_session');
-        window.location.replace('auth.html');
-      }
-    })();
-  </script>
+  <div id="scroll-track">
+    <div id="sticky-scene">
 
-  <!-- Theme toggle -->
-  <button class="theme-btn" id="themeToggle" aria-label="Toggle theme">
-    <svg class="sun-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-    <svg class="moon-icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-  </button>
+      <!-- Progress bar -->
+      <div id="progress-bar"></div>
 
-  <!-- User avatar + logout -->
-  <div class="user-menu" id="userMenu">
-    <div class="user-avatar" id="userAvatar" onclick="toggleUserDropdown()">
-      <span id="userInitials">?</span>
-    </div>
-    <div class="user-dropdown" id="userDropdown">
-      <div class="user-dropdown-name" id="userDropdownName">—</div>
-      <div class="user-dropdown-email" id="userDropdownEmail">—</div>
-      <hr class="dropdown-divider"/>
-      <button class="dropdown-item" onclick="handleLogout()">
-        <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Sign out
-      </button>
-    </div>
-  </div>
+      <!-- Canvas -->
+      <canvas id="portal-canvas"></canvas>
 
-  <div class="app-container">
-
-    <!-- ── Top bar: logo + search ── -->
-    <header class="top-bar">
-      <div class="logo-group">
-        <svg viewBox="0 0 40 40" class="compass-logo">
-          <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="1.5"/>
-          <circle cx="20" cy="20" r="2.5" fill="currentColor"/>
-          <polygon points="20,4 22,20 20,23 18,20" fill="currentColor" opacity="0.9"/>
-          <polygon points="20,36 22,20 20,17 18,20" fill="currentColor" opacity="0.35"/>
-          <polygon points="36,20 20,22 17,20 20,18" fill="currentColor" opacity="0.35"/>
-          <polygon points="4,20 20,22 23,20 20,18" fill="currentColor" opacity="0.7"/>
+      <!-- HUD elements -->
+      <div id="compass-hud">
+        <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <circle cx="20" cy="20" r="18"/>
+          <circle cx="20" cy="20" r="2.5" fill="currentColor" stroke="none"/>
+          <polygon points="20,4 22,20 20,23 18,20" fill="currentColor" stroke="none" opacity="0.9"/>
+          <polygon points="20,36 22,20 20,17 18,20" fill="currentColor" stroke="none" opacity="0.3"/>
+          <polygon points="4,20 20,22 23,20 20,18"  fill="currentColor" stroke="none" opacity="0.6"/>
+          <polygon points="36,20 20,22 17,20 20,18" fill="currentColor" stroke="none" opacity="0.3"/>
         </svg>
-        <div>
-          <span class="brand-name">Castaway</span>
-          <span class="brand-tagline">Navigate the weather</span>
-        </div>
+        <span class="hud-name">Castaway</span>
       </div>
 
-      <div class="search-wrapper">
-        <div class="search-box" id="searchBox">
-          <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" id="cityInput" placeholder="Search city or location…" autocomplete="off" spellcheck="false"/>
-          <button class="search-btn" id="searchBtn" aria-label="Search">
-            <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-          </button>
-        </div>
-        <div class="validation-msg" id="validationMsg"></div>
-        <div class="recents" id="recentsPanel">
-          <span class="recents-label">Recent</span>
-          <div class="recents-chips" id="recentsChips"></div>
-        </div>
+      <div id="depth-counter">
+        Depth: <span id="depth-val">0</span>m
       </div>
-    </header>
 
-    <!-- Offline banner -->
-    <div class="offline-banner" id="offlineBanner">
-      <div class="offline-dot"></div>
-      You're offline — check your connection
-    </div>
+      <!-- Centre content -->
+      <div id="scene-content">
+        <p class="phase-label" id="phase-label">Navigate the weather</p>
+        <h1 class="main-title" id="main-title">
+          Set Your<br/><span class="accent">Course</span>
+        </h1>
+        <p class="sub-title" id="sub-title">Scroll to enter the portal</p>
 
-    <!-- Loading -->
-    <div class="loader-wrap" id="loaderWrap">
-      <div class="wave-loader"><span></span><span></span><span></span><span></span><span></span></div>
-      <p class="loader-text">Reading the winds…</p>
-    </div>
-
-    <!-- Error -->
-    <div class="error-card" id="errorCard">
-      <div class="error-inner">
-        <div class="error-icon" id="errorIcon">⚓</div>
-        <p class="error-title" id="errorTitle">Lost at Sea</p>
-        <p class="error-msg" id="errorMsg">City not found. Check your spelling and try again.</p>
-        <p class="error-hint" id="errorHint"></p>
-        <div class="error-suggestions" id="errorSuggestions"></div>
-        <button class="error-retry-btn" id="errorRetryBtn">
-          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-          Try again
+        <button id="enter-btn" aria-label="Enter Castaway weather app">
+          Enter Castaway
+          <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
         </button>
       </div>
+
+      <!-- Scroll hint -->
+      <div id="scroll-hint">
+        <span>Scroll</span>
+        <div class="scroll-line"></div>
+      </div>
+
+      <!-- Stage label -->
+      <p id="stage-label"></p>
+
+      <!-- Skip -->
+      <button id="skip-btn">Skip intro</button>
+
     </div>
-
-    <!-- ══════════════════════════════════
-         WEATHER DASHBOARD
-    ══════════════════════════════════ -->
-    <main class="weather-content" id="weatherContent">
-
-      <!-- Location bar + tabs -->
-      <div class="location-bar">
-        <div class="loc-left">
-          <svg class="loc-pin" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-          <div>
-            <h2 class="loc-city" id="cityName">—</h2>
-            <span class="loc-meta" id="countryName">—</span>
-          </div>
-        </div>
-        <nav class="view-tabs" id="viewTabs">
-          <button class="tab-btn active" data-tab="now">Now</button>
-          <button class="tab-btn" data-tab="hourly">Hourly</button>
-          <button class="tab-btn" data-tab="forecast">10 Day</button>
-        </nav>
-      </div>
-
-      <!-- ── MAIN 3-COLUMN GRID ── -->
-      <div class="dash-grid">
-
-        <!-- COL 1: Current conditions card -->
-        <div class="glass-card current-card" id="heroCard">
-          <div class="current-top">
-            <div class="current-top-meta">
-              <span class="as-of-label" id="asOfLabel">—</span>
-            </div>
-            <div class="current-main">
-              <div class="temp-block">
-                <span class="temp-value" id="tempValue">—</span>
-                <span class="temp-unit">°C</span>
-              </div>
-              <img class="wx-icon" id="weatherIcon" src="" alt="" />
-            </div>
-            <div class="current-feels">
-              <span id="feelsLike">Feels like —°</span>
-              <span class="dot-sep">·</span>
-              <span id="weatherDesc">—</span>
-            </div>
-            <div class="hi-lo-row">
-              <span>Hi: <strong id="tempMax">—</strong>°</span>
-              <span class="dot-sep">·</span>
-              <span>Lo: <strong id="tempMin">—</strong>°</span>
-            </div>
-          </div>
-
-          <div class="current-details">
-            <p class="section-eyebrow">Current Details</p>
-            <div class="details-grid">
-              <div class="detail-row">
-                <span class="detail-label">Windchill</span>
-                <span class="detail-val" id="windchill">—</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Daily Rain</span>
-                <span class="detail-val" id="dailyRain">—</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Dew Point</span>
-                <span class="detail-val" id="dewPoint">—</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Humidity</span>
-                <span class="detail-val" id="humidity">—</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Pressure</span>
-                <span class="detail-val" id="pressure">—</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Avg Wind</span>
-                <span class="detail-val" id="windSpeed">—</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Sunrise</span>
-                <span class="detail-val" id="sunrise">—</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Moon</span>
-                <span class="detail-val" id="moonPhase">—</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Sunset</span>
-                <span class="detail-val" id="sunset">—</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">UV Index</span>
-                <span class="detail-val" id="uvIndex">—</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- COL 2: Map + Forecast -->
-        <div class="mid-col">
-
-          <!-- Mini weather map -->
-          <div class="glass-card map-card">
-            <div class="map-header">
-              <span class="section-eyebrow">Live Weather Map</span>
-              <a class="map-expand" id="mapExpand" href="#" target="_blank" rel="noopener">
-                <svg viewBox="0 0 24 24" width="13" height="13"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                Open map
-              </a>
-            </div>
-            <div class="map-frame" id="mapFrame">
-              <iframe id="weatherMap" src="" title="Weather map" frameborder="0" loading="lazy"></iframe>
-              <div class="map-placeholder" id="mapPlaceholder">
-                <svg viewBox="0 0 64 64" width="48" height="48" opacity="0.2"><circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M32 10 Q46 22 46 32 Q46 48 32 54 Q18 48 18 32 Q18 22 32 10Z" fill="none" stroke="currentColor" stroke-width="1"/><line x1="4" y1="32" x2="60" y2="32" stroke="currentColor" stroke-width="1"/></svg>
-                <span>Search a city to load map</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Weather Forecast card (today + tonight) -->
-          <div class="glass-card forecast-brief-card">
-            <div class="forecast-brief-header">
-              <span class="section-eyebrow">Weather Forecast</span>
-            </div>
-            <div class="forecast-brief-list" id="forecastBriefList">
-              <div class="forecast-brief-row" id="forecastToday">
-                <div class="fb-period">
-                  <img class="fb-icon" id="fTodayIcon" src="" alt="" />
-                  <span class="fb-label">Today</span>
-                  <span class="fb-temp" id="fTodayTemp">—</span>
-                </div>
-                <p class="fb-desc" id="fTodayDesc">—</p>
-              </div>
-              <div class="forecast-brief-row" id="forecastTonite">
-                <div class="fb-period">
-                  <img class="fb-icon" id="fTonightIcon" src="" alt="" />
-                  <span class="fb-label">Tonight</span>
-                  <span class="fb-temp" id="fTonightTemp">—</span>
-                </div>
-                <p class="fb-desc" id="fTonightDesc">—</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- COL 3: Stats column -->
-        <div class="stats-col">
-
-          <!-- Local time card -->
-          <div class="glass-card time-card">
-            <div class="time-display">
-              <span class="time-val" id="localTime">—</span>
-              <span class="time-date" id="localDate">—</span>
-            </div>
-            <div class="sun-track">
-              <div class="sun-track-bar">
-                <div class="sun-track-fill" id="sunTrackFill"></div>
-                <div class="sun-orb" id="sunOrb">☀</div>
-              </div>
-              <div class="sun-labels">
-                <span id="sunriseLabel">—</span>
-                <span id="sunsetLabel">—</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Quick stat pills -->
-          <div class="stat-pills">
-            <div class="glass-card stat-pill">
-              <svg class="pill-icon" viewBox="0 0 24 24"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/></svg>
-              <div class="pill-info">
-                <span class="pill-label">Wind</span>
-                <span class="pill-val" id="windPill">—</span>
-              </div>
-            </div>
-            <div class="glass-card stat-pill">
-              <svg class="pill-icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              <div class="pill-info">
-                <span class="pill-label">Visibility</span>
-                <span class="pill-val" id="visibility">—</span>
-              </div>
-            </div>
-            <div class="glass-card stat-pill">
-              <svg class="pill-icon" viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 1 7 7c0 5.25-7 13-7 13S5 14.25 5 9a7 7 0 0 1 7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
-              <div class="pill-info">
-                <span class="pill-label">Humidity</span>
-                <span class="pill-val" id="humidityPill">—</span>
-              </div>
-              <div class="pill-bar"><div class="pill-bar-fill" id="humidityBar"></div></div>
-            </div>
-            <div class="glass-card stat-pill">
-              <svg class="pill-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              <div class="pill-info">
-                <span class="pill-label">Pressure</span>
-                <span class="pill-val" id="pressurePill">—</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Cloud + UV row -->
-          <div class="mini-row">
-            <div class="glass-card mini-card">
-              <span class="section-eyebrow">Cloud Cover</span>
-              <span class="mini-val" id="cloudVal">—%</span>
-              <div class="mini-bar"><div class="mini-bar-fill" id="cloudFill"></div></div>
-            </div>
-            <div class="glass-card mini-card">
-              <span class="section-eyebrow">UV Index</span>
-              <span class="mini-val" id="uviVal">—</span>
-              <span class="mini-sub" id="uviLabel">—</span>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- ── BOTTOM FULL-WIDTH ROW ── -->
-      <div class="bottom-row">
-
-        <!-- Air Quality -->
-        <div class="glass-card aq-card">
-          <div class="aq-header">
-            <span class="section-eyebrow">Air Quality</span>
-            <a class="aq-link" href="https://aqicn.org" target="_blank" rel="noopener">Full report ↗</a>
-          </div>
-          <div class="aq-body">
-            <div class="aq-score-wrap">
-              <div class="aq-badge" id="aqBadge">
-                <span class="aq-num" id="aqNum">—</span>
-              </div>
-              <div>
-                <span class="aq-level" id="aqLevel">—</span>
-                <span class="aq-trigger">Top Triggers: <span id="aqTrigger">—</span></span>
-              </div>
-            </div>
-            <div class="aq-bar-wrap">
-              <div class="aq-scale">
-                <span>Good</span><span>Moderate</span><span>Unhealthy</span><span>Hazardous</span>
-              </div>
-              <div class="aq-bar">
-                <div class="aq-segments">
-                  <div class="aq-seg" style="background:#4ec9a0"></div>
-                  <div class="aq-seg" style="background:#f0c060"></div>
-                  <div class="aq-seg" style="background:#f0a458"></div>
-                  <div class="aq-seg" style="background:#e06c75"></div>
-                  <div class="aq-seg" style="background:#a070c0"></div>
-                </div>
-                <div class="aq-marker" id="aqMarker" style="left:0%"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Lightning / Alerts -->
-        <div class="glass-card lightning-card">
-          <div class="lightning-header">
-            <span class="section-eyebrow">Lightning &amp; Alerts</span>
-          </div>
-          <div class="lightning-body">
-            <div class="lightning-icon-wrap" id="lightningIconWrap">
-              <div class="lightning-orb" id="lightningOrb">
-                <svg viewBox="0 0 24 24" width="28" height="28"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-              </div>
-            </div>
-            <div class="lightning-info">
-              <span class="lightning-dist" id="lightningDist">No alerts</span>
-              <span class="lightning-sub" id="lightningSub">Conditions are calm</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 5-day forecast strip -->
-        <div class="glass-card forecast-strip-card">
-          <div class="fs-header">
-            <span class="section-eyebrow">5-Day Forecast</span>
-            <div class="chart-toggle">
-              <button class="chart-btn active" data-chart="temp">Temp</button>
-              <button class="chart-btn" data-chart="rain">Rain</button>
-              <button class="chart-btn" data-chart="wind">Wind</button>
-            </div>
-          </div>
-          <div class="chart-wrap">
-            <canvas id="forecastChart"></canvas>
-          </div>
-          <div class="forecast-days" id="forecastDays"></div>
-        </div>
-
-      </div>
-
-    </main>
-
-    <!-- Empty state -->
-    <div class="empty-state" id="emptyState">
-      <div class="empty-compass">
-        <svg viewBox="0 0 120 120">
-          <circle cx="60" cy="60" r="55" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 4" opacity="0.3"/>
-          <circle cx="60" cy="60" r="40" fill="none" stroke="currentColor" stroke-width="0.5" opacity="0.2"/>
-          <circle cx="60" cy="60" r="6" fill="currentColor" opacity="0.4"/>
-          <polygon points="60,10 63,60 60,68 57,60" fill="currentColor" opacity="0.7"/>
-          <polygon points="60,110 63,60 60,52 57,60" fill="currentColor" opacity="0.2"/>
-          <polygon points="110,60 60,63 52,60 60,57" fill="currentColor" opacity="0.2"/>
-          <polygon points="10,60 60,63 68,60 60,57" fill="currentColor" opacity="0.4"/>
-          <text x="60" y="8" text-anchor="middle" font-size="8" fill="currentColor" opacity="0.5" font-family="Space Mono">N</text>
-          <text x="60" y="116" text-anchor="middle" font-size="8" fill="currentColor" opacity="0.3" font-family="Space Mono">S</text>
-          <text x="116" y="64" text-anchor="middle" font-size="8" fill="currentColor" opacity="0.3" font-family="Space Mono">E</text>
-          <text x="5" y="64" text-anchor="middle" font-size="8" fill="currentColor" opacity="0.3" font-family="Space Mono">W</text>
-        </svg>
-      </div>
-      <p class="empty-title">Set Your Course</p>
-      <p class="empty-sub">Search for any city to see current conditions</p>
-    </div>
-
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-  <script src="script.js"></script>
+  <script>
+    'use strict';
+
+    /* ── Canvas setup ── */
+    const canvas = document.getElementById('portal-canvas');
+    const ctx    = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      canvas.width  = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    /* ── Scroll state ── */
+    const TOTAL_SCROLL = document.getElementById('scroll-track').scrollHeight - window.innerHeight;
+    let   progress     = 0;
+
+    window.addEventListener('scroll', () => {
+      progress = Math.min(window.scrollY / (TOTAL_SCROLL * 0.85), 1);
+      updateUI(progress);
+    }, { passive: true });
+
+    /* ── Helpers ── */
+    const lerp   = (a, b, t) => a + (b - a) * t;
+    const clamp  = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    function easeInOut(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
+    function easeIn3(t)   { return t * t * t; }
+
+    /* ── Stage copy ── */
+    const STAGES = [
+      { at: 0,    label: '' },
+      { at: 0.06, label: 'Approaching the portal…' },
+      { at: 0.22, label: 'Entering the vortex…' },
+      { at: 0.50, label: 'Breaking through…' },
+      { at: 0.72, label: 'Emerging into clear skies…' },
+      { at: 0.90, label: 'You have arrived' },
+    ];
+
+    function getStageLabel(p) {
+      let label = '';
+      for (const s of STAGES) { if (p >= s.at) label = s.label; }
+      return label;
+    }
+
+    /* ── UI updates ── */
+    function updateUI(p) {
+      /* progress bar */
+      document.getElementById('progress-bar').style.width = (p * 100) + '%';
+
+      /* HUD */
+      document.getElementById('compass-hud').classList.toggle('visible', p > 0.06);
+      document.getElementById('depth-counter').classList.toggle('visible', p > 0.06);
+      document.getElementById('depth-val').textContent =
+        Math.round(p * 8500).toLocaleString();
+
+      /* scroll hint */
+      document.getElementById('scroll-hint').style.opacity = p < 0.04 ? '1' : '0';
+
+      /* stage label */
+      const sl    = document.getElementById('stage-label');
+      const label = getStageLabel(p);
+      sl.textContent = label;
+      sl.classList.toggle('visible', label.length > 0 && p < 0.92);
+
+      /* centre content */
+      const content  = document.getElementById('scene-content');
+      const phaseEl  = document.getElementById('phase-label');
+      const titleEl  = document.getElementById('main-title');
+      const subEl    = document.getElementById('sub-title');
+      const enterBtn = document.getElementById('enter-btn');
+
+      if (p < 0.04) {
+        /* Phase 0 — intro */
+        phaseEl.textContent   = 'Navigate the weather';
+        titleEl.innerHTML     = 'Set Your<br/><span class="accent">Course</span>';
+        subEl.textContent     = 'Scroll to enter the portal';
+        content.style.opacity = '1';
+        enterBtn.classList.remove('visible');
+
+      } else if (p < 0.42) {
+        /* Phase 1 — fading out as portal pulls us in */
+        const t = clamp((p - 0.04) / 0.38, 0, 1);
+        content.style.opacity = (1 - t).toFixed(3);
+        enterBtn.classList.remove('visible');
+
+      } else if (p < 0.56) {
+        /* Phase 2 — black hole centre, content hidden */
+        content.style.opacity = '0';
+        enterBtn.classList.remove('visible');
+
+      } else if (p < 0.72) {
+        /* Phase 3 — emerge, fade new content in */
+        phaseEl.textContent = 'The weather awaits';
+        titleEl.innerHTML   = 'Cast<span class="accent">away</span>';
+        subEl.textContent   = 'Real-time · Precise · Beautiful';
+        const t = clamp((p - 0.56) / 0.16, 0, 1);
+        content.style.opacity = easeInOut(t).toFixed(3);
+        enterBtn.classList.remove('visible');
+
+      } else {
+        /* Phase 4 — fully arrived */
+        phaseEl.textContent   = 'The weather awaits';
+        titleEl.innerHTML     = 'Cast<span class="accent">away</span>';
+        subEl.textContent     = 'Real-time · Precise · Beautiful';
+        content.style.opacity = '1';
+        enterBtn.classList.add('visible');
+      }
+    }
+
+    /* ── Drawing ── */
+
+    function drawStarField(p, cx, cy, w, h) {
+      const stars = [
+        [0.12,0.15,1.4],[0.88,0.08,1.1],[0.25,0.30,1.6],[0.72,0.22,1.2],
+        [0.50,0.05,1.0],[0.08,0.45,1.3],[0.93,0.40,1.1],[0.35,0.18,1.5],
+        [0.65,0.12,1.2],[0.15,0.60,1.0],[0.82,0.55,1.3],[0.42,0.08,1.4],
+        [0.58,0.35,1.1],[0.28,0.52,1.6],[0.78,0.48,1.2],[0.05,0.28,1.0],
+        [0.95,0.25,1.3],[0.48,0.25,1.5],[0.22,0.38,1.1],[0.75,0.32,1.4],
+      ];
+      const zoom  = easeIn3(clamp(p / 0.48, 0, 1));
+      const alpha = 1 - clamp((p - 0.28) / 0.2, 0, 1);
+      stars.forEach(([nx, ny, sz], i) => {
+        const ox = (nx - 0.5) * w;
+        const oy = (ny - 0.5) * h;
+        const sx = cx + ox * (1 + zoom * 4);
+        const sy = cy + oy * (1 + zoom * 4);
+        ctx.beginPath();
+        ctx.arc(sx, sy, sz, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${180+(i%5)*14},${200+(i%3)*10},255,${alpha*(0.4+(i%4)*0.15)})`;
+        ctx.fill();
+      });
+    }
+
+    function drawWaves(p, w, h) {
+      const alpha = (1 - clamp((p - 0.38) / 0.15, 0, 1)) * 0.07;
+      const phase = performance.now() * 0.00048;
+      for (let i = 0; i < 8; i++) {
+        const yBase = (h / 8) * (i + 0.5);
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(91,184,212,${alpha})`;
+        ctx.lineWidth   = 0.8;
+        for (let x = 0; x <= w; x += 2) {
+          const y = yBase + Math.sin((x / 200) + phase + i * 0.85) * 22;
+          x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+    }
+
+    function drawPortalRings(p, cx, cy, w, h) {
+      const maxR    = Math.min(w, h) * 0.48;
+      const numRings = 16;
+      const pullIn  = easeInOut(clamp(p / 0.5, 0, 1));
+      const pushOut = p > 0.5 ? easeIn3(clamp((p - 0.5) / 0.14, 0, 1)) : 0;
+      const now     = performance.now() * 0.0003;
+
+      /* Static rings */
+      for (let i = numRings; i >= 0; i--) {
+        const base  = i / numRings;
+        let   r     = maxR * base * (1 - pullIn * 0.86) + pushOut * maxR * 1.7 * base;
+        if (r < 1) continue;
+
+        const rShift = Math.round(lerp(91,  190, pullIn * base));
+        const gShift = Math.round(lerp(184, 220, pullIn * base));
+        const bShift = Math.round(lerp(212, 255, pullIn * base));
+        const alpha  = clamp((1 - base) * 0.9 + 0.06, 0, 1);
+        const glow   = i < 5 && p > 0.1;
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${rShift},${gShift},${bShift},${alpha * 0.28})`;
+        ctx.lineWidth   = glow ? 1.8 : 0.7;
+        ctx.stroke();
+
+        if (glow) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(91,184,212,${0.14 * (1 - base)})`;
+          ctx.lineWidth   = 8;
+          ctx.stroke();
+        }
+      }
+
+      /* Core glow */
+      if (p > 0.05) {
+        const innerR    = maxR * (1 - pullIn * 0.86) * 0.09 + pushOut * maxR * 0.14;
+        const coreAlpha = clamp(pullIn * 2, 0, 1) * (1 - pushOut);
+        if (innerR > 1) {
+          const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, innerR * 3.5);
+          grad.addColorStop(0,   `rgba(255,255,255,${coreAlpha * 0.65})`);
+          grad.addColorStop(0.3, `rgba(91,184,212,${coreAlpha * 0.38})`);
+          grad.addColorStop(1,   'rgba(0,0,0,0)');
+          ctx.beginPath();
+          ctx.arc(cx, cy, innerR * 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = grad;
+          ctx.fill();
+        }
+      }
+
+      /* Orbiting cyan dots — outer ring */
+      const outerR = maxR * (0.96 - pullIn * 0.84) * (1 - pushOut * 0.92);
+      if (outerR > 3) {
+        const n = 52;
+        for (let i = 0; i < n; i++) {
+          const ang = (i / n) * Math.PI * 2 + now * (1 + pullIn * 2.2);
+          ctx.beginPath();
+          ctx.arc(cx + Math.cos(ang) * outerR, cy + Math.sin(ang) * outerR,
+                  1.6 + (i % 3) * 0.5, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(91,184,212,${0.18 + pullIn * 0.28})`;
+          ctx.fill();
+        }
+      }
+
+      /* Orbiting amber dots — inner ring */
+      const innerR2 = maxR * (0.60 - pullIn * 0.53) * (1 - pushOut * 0.92);
+      if (innerR2 > 3) {
+        const n = 26;
+        for (let i = 0; i < n; i++) {
+          const ang = (i / n) * Math.PI * 2 - now * 0.85;
+          ctx.beginPath();
+          ctx.arc(cx + Math.cos(ang) * innerR2, cy + Math.sin(ang) * innerR2,
+                  1.2, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(240,164,88,${0.28 + pullIn * 0.22})`;
+          ctx.fill();
+        }
+      }
+    }
+
+    function drawEmergeLight(p, cx, cy, w, h) {
+      const t = clamp((p - 0.44) / 0.25, 0, 1);
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(w, h) * 0.75 * t);
+      grad.addColorStop(0,   `rgba(91,184,212,${t * 0.24})`);
+      grad.addColorStop(0.45, `rgba(13,24,41,${t * 0.3})`);
+      grad.addColorStop(1,   'rgba(0,0,0,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    function drawSkyGlow(p, cx, cy, w, h) {
+      const t = clamp((p - 0.68) / 0.32, 0, 1);
+      const grad = ctx.createRadialGradient(cx, cy * 0.35, 0, cx, cy * 0.35, w * 0.9);
+      grad.addColorStop(0,   `rgba(91,184,212,${t * 0.09})`);
+      grad.addColorStop(0.55,'rgba(8,14,25,0)');
+      grad.addColorStop(1,   'rgba(0,0,0,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    function drawScene(p) {
+      const w  = canvas.width, h = canvas.height;
+      const cx = w / 2,        cy = h / 2;
+
+      ctx.clearRect(0, 0, w, h);
+
+      /* Background — deep navy */
+      const bg = Math.round(lerp(6, 9, p));
+      ctx.fillStyle = `rgb(${bg},${Math.round(bg*1.45)},${Math.round(bg*2.7)})`;
+      ctx.fillRect(0, 0, w, h);
+
+      if (p < 0.62) drawStarField(p, cx, cy, w, h);
+      drawWaves(p, w, h);
+      drawPortalRings(p, cx, cy, w, h);
+      if (p > 0.44) drawEmergeLight(p, cx, cy, w, h);
+      if (p > 0.68) drawSkyGlow(p, cx, cy, w, h);
+    }
+
+    /* ── Animation loop ── */
+    function loop() {
+      drawScene(progress);
+      requestAnimationFrame(loop);
+    }
+    loop();
+    updateUI(0);
+
+    /* ─────────────────────────────────────────
+       PAGE TRANSITION — fade to black then
+       navigate to the Castaway weather app
+    ───────────────────────────────────────── */
+    function launchApp() {
+      const overlay = document.getElementById('transition-overlay');
+      overlay.classList.add('fade-in');
+      setTimeout(() => {
+        window.location.href = 'index.html';
+      }, 700);
+    }
+
+    document.getElementById('enter-btn').addEventListener('click', launchApp);
+    document.getElementById('skip-btn').addEventListener('click',  launchApp);
+
+    /* Auto-launch when scroll animation fully completes */
+    let autoLaunched = false;
+    window.addEventListener('scroll', () => {
+      if (!autoLaunched && window.scrollY >= document.getElementById('scroll-track').scrollHeight - window.innerHeight - 10) {
+        autoLaunched = true;
+        setTimeout(launchApp, 600);
+      }
+    }, { passive: true });
+  </script>
 </body>
 </html>
